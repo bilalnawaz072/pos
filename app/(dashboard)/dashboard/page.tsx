@@ -9,7 +9,7 @@ import { SalesOverTimeChart } from './components/sales-over-time-chart';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { LowStockAlert } from './components/low-stock-alert';
-import { DollarSign, CreditCard, ArrowDownRight, TrendingUp, Percent, ShoppingCart, PackagePlus, Box, Sandwich } from 'lucide-react';
+import { DollarSign, CreditCard, ArrowDownRight, TrendingUp, Percent, ShoppingCart, PackagePlus, Box, Sandwich, ClipboardList, Truck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from "next/link";
 
@@ -23,24 +23,31 @@ const calculatePercentageChange = (current: number, previous: number) => {
 };
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
-  // --- DATE RANGE SETUP ---
-  const to = searchParams.to ? new Date(searchParams.to) : new Date();
-  const from = searchParams.from ? new Date(searchParams.from) : addDays(to, -7);
-  from.setHours(0, 0, 0, 0);
-  to.setHours(23, 59, 59, 999);
-  const periodDuration = differenceInDays(to, from);
-  const prevTo = addDays(from, -1);
-  const prevFrom = addDays(prevTo, -periodDuration);
+   // --- DATE RANGE SETUP ---
+   const to = searchParams.to ? new Date(searchParams.to) : new Date();
+   const from = searchParams.from ? new Date(searchParams.from) : addDays(to, -7);
+   from.setHours(0, 0, 0, 0);
+   to.setHours(23, 59, 59, 999);
+   const periodDuration = differenceInDays(to, from);
+   const prevTo = addDays(from, -1);
+   const prevFrom = addDays(prevTo, -periodDuration);
 
   // --- ALL DATA FETCHING QUERIES ---
-  const [currentPeriodTx, previousPeriodTx, latestTransactions, itemsSold] = await Promise.all([
-    prisma.transaction.findMany({ where: { createdAt: { gte: from, lte: to } }, include: { items: true } }),
-    prisma.transaction.findMany({ where: { createdAt: { gte: prevFrom, lte: prevTo } } }),
-    prisma.transaction.findMany({ take: 10, orderBy: { createdAt: 'desc' }, include: { customer: true, items: true } }),
-    prisma.transactionItem.findMany({
-      where: { transaction: { createdAt: { gte: from, lte: to }, total: { gt: 0 } } }
-    }),
-  ]);
+ // --- ALL DATA FETCHING QUERIES ---
+ const [currentPeriodTx, previousPeriodTx, latestTransactions, itemsSold, pendingPOs] = await Promise.all([
+  prisma.transaction.findMany({ where: { createdAt: { gte: from, lte: to } }, include: { items: true } }),
+  prisma.transaction.findMany({ where: { createdAt: { gte: prevFrom, lte: prevTo } } }),
+  prisma.transaction.findMany({ take: 10, orderBy: { createdAt: 'desc' }, include: { customer: true, items: true } }),
+  prisma.transactionItem.findMany({
+    where: { transaction: { createdAt: { gte: from, lte: to }, total: { gt: 0 } } }
+  }),
+  // NEW QUERY for pending purchase orders
+  prisma.purchaseOrder.findMany({
+    where: { status: { in: ['PENDING', 'ORDERED', 'PARTIALLY_RECEIVED'] } },
+    include: { items: true },
+  }),
+]);
+  
 
   // --- KPI CALCULATIONS ---
   const currentSales = currentPeriodTx.filter(tx => tx.total > 0);
@@ -62,6 +69,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   const revenueChange = calculatePercentageChange(netRevenue, previousRevenue);
   const salesCountChange = calculatePercentageChange(currentSales.length, prevSales.length);
+
+    // NEW CALCULATIONS for POs
+    const pendingPOCount = pendingPOs.length;
+    const pendingPOValue = pendingPOs.reduce((sum, po) => {
+      const poTotal = po.items.reduce((itemSum, item) => itemSum + (item.costPerItem * item.quantityOrdered), 0);
+      return sum + poTotal;
+    }, 0);
 
   // --- CHART DATA ---
   const dailyRevenue: { [key: string]: number } = {};
@@ -119,6 +133,28 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Total Profit</CardTitle><TrendingUp className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{formatCurrency(totalProfit)}</div><p className="text-xs text-muted-foreground">Profit Margin: {profitMargin.toFixed(1)}%</p></CardContent></Card>
           <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Sales</CardTitle><CreditCard className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">+{currentSales.length}</div><p className={cn("text-xs", salesCountChange >= 0 ? "text-emerald-500" : "text-destructive")}>{salesCountChange.toFixed(1)}% from last period</p></CardContent></Card>
           <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Total Refunds</CardTitle><ArrowDownRight className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold text-destructive">-{formatCurrency(totalRefunds)}</div><p className="text-xs text-muted-foreground">{currentRefunds.length} transactions</p></CardContent></Card>
+          {/* NEW CARDS */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Pending POs</CardTitle>
+              <ClipboardList className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{pendingPOCount}</div>
+              <p className="text-xs text-muted-foreground">orders awaiting delivery</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Outstanding PO Value</CardTitle>
+              <Truck className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(pendingPOValue)}</div>
+              <p className="text-xs text-muted-foreground">total cost of pending orders</p>
+            </CardContent>
+          </Card>
+
         </div>
 
         <div className="grid gap-4 grid-cols-1">
