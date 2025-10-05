@@ -45,8 +45,8 @@ const calculateTotals = (items: CartItem[], promotions: PromotionWithProductIds[
 
     let discountApplied = 0;
     if (mode === 'sale') {
-      const applicablePromotion = promotions.find(promo => 
-        promo.type === 'PERCENTAGE_OFF_PRODUCT' && 
+      const applicablePromotion = promotions.find(promo =>
+        promo.type === 'PERCENTAGE_OFF_PRODUCT' &&
         promo.products.some(p => p.id === item.product.id)
       );
 
@@ -80,7 +80,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   setMode: (mode) => set({ mode, ...calculateTotals([], get().activePromotions, mode) }),
   setWeighedItem: (product) => set({ weighedItem: product }),
   setAgeRestrictedItem: (product) => set({ ageRestrictedItem: product }),
-  
+
   loadReturnItems: (items) => {
     set(calculateTotals(items, get().activePromotions, 'return'));
   },
@@ -88,8 +88,14 @@ export const useCartStore = create<CartState>((set, get) => ({
   addItem: (product) => {
     if (get().mode === 'return') { toast.error("Cannot add products in Return Mode."); return; }
     if (product.isAgeRestricted) { set({ ageRestrictedItem: product }); return; }
-    if (product.isWeighed) { set({ weighedItem: product }); return; }
-
+    // if (product.isWeighed) { set({ weighedItem: product }); return; }
+    if (product.isWeighed) {
+      // If it's a "real" weighed item from the main product list
+      if (product.unit !== 'each') {
+        set({ weighedItem: product });
+        return;
+      }
+    }
     const { items, activePromotions, mode } = get();
     const existingItem = items.find((item) => item.product.id === product.id);
     const quantityInCart = existingItem ? existingItem.quantity : 0;
@@ -98,7 +104,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     const updatedItems = existingItem
       ? items.map((item) => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item)
       : [...items, { product, quantity: 1, discountApplied: 0 }];
-    
+
     set(calculateTotals(updatedItems, activePromotions, mode));
     toast.success(`${product.name} added to cart.`);
   },
@@ -108,7 +114,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     const existingItem = items.find((item) => item.product.id === product.id);
     const quantityInCart = existingItem ? existingItem.quantity : 0;
     if (quantityInCart >= product.stockQuantity) { toast.error("Maximum stock reached."); return; }
-    
+
     const updatedItems = existingItem
       ? items.map((item) => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item)
       : [...items, { product, quantity: 1, discountApplied: 0 }];
@@ -136,8 +142,8 @@ export const useCartStore = create<CartState>((set, get) => ({
   updateQuantity: (productId, quantity) => {
     const { items, activePromotions, mode } = get();
     const itemToUpdate = items.find(item => item.product.id === productId);
-    if(!itemToUpdate) return;
-    if(itemToUpdate.product.isWeighed || get().mode === 'return') { toast.error("Cannot change quantity."); return; }
+    if (!itemToUpdate) return;
+    if (itemToUpdate.product.isWeighed || get().mode === 'return') { toast.error("Cannot change quantity."); return; }
 
     if (quantity > itemToUpdate.product.stockQuantity) {
       toast.error("Maximum stock reached.");
@@ -145,7 +151,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       set(calculateTotals(updatedItems, activePromotions, mode));
       return;
     }
-    
+
     const updatedItems = (quantity < 1)
       ? items.filter((item) => item.product.id !== productId)
       : items.map((item) => item.product.id === productId ? { ...item, quantity } : item);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@/lib/generated/prisma';
+import { logAudit } from '@/lib/audit-log';
 
 export async function PATCH(
   req: Request,
@@ -41,6 +42,15 @@ export async function DELETE(
     const product = await prisma.product.delete({
       where: { id: params.productId },
     });
+
+    // ADD THIS LOGGING CALL
+    await logAudit({
+      action: 'PRODUCT_DELETE',
+      details: `Product "${product.name}" (SKU: ${product.sku}) was deleted.`,
+      entityId: product.id,
+      entityType: 'Product',
+    });
+
     return NextResponse.json(product);
   } catch (error) {
     console.error('[PRODUCT_DELETE]', error);

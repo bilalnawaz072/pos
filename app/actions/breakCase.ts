@@ -1,5 +1,6 @@
 "use server";
 
+import { logAudit } from "@/lib/audit-log";
 import { prisma } from "@/lib/prisma";
 
 export async function breakCase(
@@ -23,6 +24,8 @@ export async function breakCase(
       if (caseProduct.stockQuantity < numberOfCases) {
         throw new Error("Insufficient stock of cases to break.");
       }
+
+     
 
       // 2. Decrement stock of the case product
       await tx.product.update({
@@ -49,6 +52,14 @@ export async function breakCase(
         where: { id: caseProduct.containsProductId },
         data: { stockQuantity: { increment: numberOfEaches } },
       });
+
+      // ADD THIS LOGGING CALL (inside the transaction)
+      await logAudit({
+        action: 'INVENTORY_CASE_BREAK',
+        details: `Broke ${numberOfCases} case(s) of "${caseProduct.name}" into ${numberOfEaches} units.`,
+        entityId: caseProduct.id,
+        entityType: 'Product',
+    });
     });
 
     return { success: true };

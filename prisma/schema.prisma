@@ -56,71 +56,77 @@ model Category {
   @@unique([name, departmentId])
 }
 
+// Add the relation back to Vendor
 model Vendor {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  products  Product[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id              String          @id @default(cuid())
+  name            String          @unique
+  contact         String?
+  products        Product[]
+  purchaseOrders  PurchaseOrder[] // ADD THIS LINE
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 }
 
 model Product {
-  id               String   @id @default(cuid())
-  name             String
-  sku              String   @unique
-  barcode          String?  @unique
-  price            Float
-  cost             Float
+  id              String         @id @default(cuid())
+  name            String
+  sku             String         @unique
+  barcode         String?        @unique
+  price           Float
+  cost            Float
   // This field now represents the TOTAL stock across all lots.
   // We will keep it updated for fast lookups.
-  stockQuantity    Int
-  unit             String
-  isWeighed        Boolean  @default(false)
-  isAgeRestricted  Boolean  @default(false)
-  categoryId       String
-  category         Category @relation(fields: [categoryId], references: [id])
-  vendorId         String?
-  vendor           Vendor?  @relation(fields: [vendorId], references: [id])
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  stockQuantity   Int
+  unit            String
+  isWeighed       Boolean        @default(false)
+  isAgeRestricted Boolean        @default(false)
+  categoryId      String
+  category        Category       @relation(fields: [categoryId], references: [id])
+  vendorId        String?
+  vendor          Vendor?        @relation(fields: [vendorId], references: [id])
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
   promotions      Promotion[]
   // Add relation to the new InventoryLot model
-  inventoryLots    InventoryLot[]
+  inventoryLots   InventoryLot[]
   // START: NEW FIELDS FOR CASE BREAKING
   // For a "case" product, this defines how many "eaches" it contains.
-  caseUnitCount    Int?
+  caseUnitCount   Int?
 
   // For a "case" product, this links to the "each" product it contains.
-  containsProductId String?     @unique
-  containsProduct   Product?    @relation("CaseToEach", fields: [containsProductId], references: [id])
+  containsProductId String?  @unique
+  containsProduct   Product? @relation("CaseToEach", fields: [containsProductId], references: [id])
 
   // For an "each" product, this lists the "case" products that contain it.
-  containedInCases  Product[]   @relation("CaseToEach")
+  containedInCases Product[]   @relation("CaseToEach")
   // END: NEW FIELDS
+  deliOrders       DeliOrder[]
+  purchaseOrderItems PurchaseOrderItem[]
+  reorderThreshold Int?
 }
 
 // ADD THIS NEW MODEL
 model InventoryLot {
-  id                 String    @id @default(cuid())
-  receivedAt         DateTime  @default(now())
-  quantityReceived   Int
-  quantityRemaining  Int
-  expirationDate     DateTime? // Optional, for non-perishable items
+  id                String    @id @default(cuid())
+  receivedAt        DateTime  @default(now())
+  quantityReceived  Int
+  quantityRemaining Int
+  expirationDate    DateTime? // Optional, for non-perishable items
 
-  productId          String
-  product            Product   @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 }
 
 model Customer {
-  id            String   @id @default(cuid())
+  id            String        @id @default(cuid())
   firstName     String
   lastName      String
-  phone         String?  @unique
-  email         String?  @unique
-  loyaltyPoints Int      @default(0)
-  transactions    Transaction[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  phone         String?       @unique
+  email         String?       @unique
+  loyaltyPoints Int           @default(0)
+  transactions  Transaction[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 }
 
 // Add this new Enum for payment types
@@ -143,9 +149,9 @@ model Transaction {
   amountTendered Float? // Used for cash transactions
   changeGiven    Float? // Used for cash transactions
   refundedById   String?           @unique
-// ADD THESE TWO LINES
-  customerId      String?
-  customer        Customer?         @relation(fields: [customerId], references: [id])
+  // ADD THESE TWO LINES
+  customerId     String?
+  customer       Customer?         @relation(fields: [customerId], references: [id])
   // Later we can add relations to Employee and Customer
   // employeeId      String
   // customerId      String?
@@ -157,11 +163,13 @@ model TransactionItem {
   transaction   Transaction @relation(fields: [transactionId], references: [id])
 
   // A snapshot of the product at the time of sale
-  productId String
-  name      String
-  price     Float // Price at the time of sale
-  quantity  Int
-  weight    Float? // Weight at the time of sale
+  productId      String
+  name           String
+  price          Float // Price at the time of sale
+  cost           Float  @default(0) // ADD THIS FIELD
+  quantity       Int
+  weight         Float? // Weight at the time of sale
+  discountAmount Float  @default(0)
 }
 
 // Add this new Enum for different promotion types
@@ -171,20 +179,88 @@ enum PromotionType {
   MULTI_BUY // e.g., 2 for $5
 }
 
-
 // ADD THIS NEW MODEL
 model Promotion {
-  id              String        @id @default(cuid())
-  description     String
-  type            PromotionType
-  discountValue   Float // For PERCENTAGE, this is the percentage (e.g., 10 for 10%)
-  startDate       DateTime
-  endDate         DateTime?
-  isActive        Boolean       @default(true)
+  id            String        @id @default(cuid())
+  description   String
+  type          PromotionType
+  discountValue Float // For PERCENTAGE, this is the percentage (e.g., 10 for 10%)
+  startDate     DateTime
+  endDate       DateTime?
+  isActive      Boolean       @default(true)
 
   // Many-to-many relationship with Product
-  products        Product[]
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ADD THIS NEW MODEL
+model DeliOrder {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  baseProductId String
+  baseProduct   Product @relation(fields: [baseProductId], references: [id])
+
+  weight     Float
+  totalPrice Float
+
+  // The CUID 'id' will serve as our unique barcode
+
+  isFulfilled Boolean @default(false) // To track if it's been scanned at checkout
+}
+
+enum PurchaseOrderStatus {
+  PENDING
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+// Add this new model for Purchase Orders
+model PurchaseOrder {
+  id          String              @id @default(cuid())
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  orderedAt   DateTime?
+  expectedAt  DateTime?
+  receivedAt  DateTime?
+  status      PurchaseOrderStatus @default(PENDING)
   
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  vendorId    String
+  vendor      Vendor              @relation(fields: [vendorId], references: [id])
+  
+  items       PurchaseOrderItem[]
+}
+
+// Add this new model for items within a PO
+model PurchaseOrderItem {
+  id                String        @id @default(cuid())
+  quantityOrdered   Int
+  quantityReceived  Int           @default(0)
+  costPerItem       Float // Cost at the time of order
+  
+  purchaseOrderId   String
+  purchaseOrder     PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  
+  productId         String
+  product           Product       @relation(fields: [productId], references: [id])
+}
+
+// ADD THIS NEW MODEL
+model AuditLog {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  
+  action      String   // e.g., "PRODUCT_DELETE", "TRANSACTION_REFUND"
+  details     String   // Human-readable description of the event
+  
+  entityId    String   // The ID of the object that was affected
+  entityType  String   // The type of object (e.g., "Product")
+
+  // In a real system with authentication, you would store the employee's ID here
+  // employeeId  String?
 }

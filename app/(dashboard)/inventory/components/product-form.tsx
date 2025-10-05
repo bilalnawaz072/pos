@@ -15,8 +15,9 @@ import { ProductWithRelations } from "./columns";
 import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 
 interface ProductFormProps {
@@ -25,6 +26,7 @@ interface ProductFormProps {
   vendors: Vendor[];
   allProducts: Product[];
   onCancel: () => void;
+  onSuccess: () => void;
 }
 
 export const ProductForm: React.FC<ProductFormProps> = ({
@@ -33,6 +35,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   vendors,
   allProducts,
   onCancel,
+  onSuccess
 }) => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -40,11 +43,13 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   const title = initialData ? "Edit product" : "Add new product";
   const toastMessage = initialData ? "Product updated." : "Product created.";
   const actionLabel = initialData ? "Save changes" : "Create";
+  const [isCaseProduct, setIsCaseProduct] = useState(!!initialData?.containsProductId);
 
   const {
     register,
     handleSubmit,
     control,
+    setValue,
     formState: { errors },
   } = useForm<ProductWithRelations>({
     defaultValues: initialData || {
@@ -86,7 +91,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       if (!submissionData.caseUnitCount || submissionData.caseUnitCount <= 0) {
         delete (submissionData as any).caseUnitCount;
       }
-       if (!submissionData.vendorId) {
+      if (!submissionData.vendorId) {
         delete (submissionData as any).vendorId;
       }
 
@@ -99,7 +104,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       router.refresh();
       toast.success(toastMessage);
       onCancel();
-    } catch (error:any) {
+    } catch (error: any) {
       toast.error(error.response?.data || "Something went wrong.");
       console.error(error);
     } finally {
@@ -107,20 +112,46 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     }
   };
 
+  const handleCaseToggle = (checked: boolean) => {
+    setIsCaseProduct(checked);
+    if (!checked) {
+      // Clear case-related fields when toggled off
+      setValue("containsProductId", null);
+      setValue("caseUnitCount", null);
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        <Input {...register("name", { required: true })} placeholder="Product Name" disabled={loading} />
-        <Input {...register("sku", { required: true })} placeholder="SKU" disabled={loading} />
+      <Input {...register("name", { required: true })} placeholder="Product Name" />
+      <Input {...register("sku", { required: true })} placeholder="SKU" />
       </div>
-       {/* ADD THIS NEW INPUT FIELD */}
-       <Input {...register("barcode")} placeholder="Barcode (UPC, EAN, etc.)" disabled={loading} />
+      {/* ADD THIS NEW INPUT FIELD */}
+      <Input {...register("barcode")} placeholder="Barcode (UPC, EAN, etc.)" disabled={loading} />
 
       <div className="grid grid-cols-3 gap-4">
         <Input {...register("price", { required: true, valueAsNumber: true })} type="number" step="0.01" placeholder="Price" disabled={loading} />
         <Input {...register("cost", { required: true, valueAsNumber: true })} type="number" step="0.01" placeholder="Cost" disabled={loading} />
         <Input {...register("stockQuantity", { required: true, valueAsNumber: true })} type="number" placeholder="Stock" disabled={loading} />
       </div>
+
+       {/* NEW REORDER THRESHOLD FIELD */}
+       <div>
+        <Label>Reorder Threshold (Optional)</Label>
+        <Input 
+          type="number" 
+          {...register("reorderThreshold", { 
+            valueAsNumber: true,
+            validate: v => !v || v >= 0 || "Must be a positive number"
+          })} 
+          placeholder="e.g., 10" 
+        />
+         <p className="text-xs text-muted-foreground">
+            When stock falls to this level, an alert will be shown on the dashboard.
+          </p>
+      </div>
+      
       <div className="grid grid-cols-2 gap-4">
         <Controller
           name="categoryId"
@@ -160,7 +191,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
           <Label htmlFor="isWeighed">Sold by Weight</Label>
         </div>
         <div className="flex items-center space-x-2">
-           <Controller name="isAgeRestricted" control={control} render={({ field }) => (
+          <Controller name="isAgeRestricted" control={control} render={({ field }) => (
             <Switch id="isAgeRestricted" checked={field.value} onCheckedChange={field.onChange} disabled={loading} />
           )} />
           <Label htmlFor="isAgeRestricted">Age Restricted</Label>
@@ -172,44 +203,54 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       </div>
 
       <Separator />
-      
-      <div className="space-y-2">
-        <h3 className="text-lg font-medium">Case Properties (Optional)</h3>
-        <p className="text-sm text-muted-foreground">
-          If this product is a case, define what it contains and how many units.
-        </p>
-        <div className="grid grid-cols-2 gap-4">
-          <Controller
-            name="containsProductId"
-            control={control}
-            render={({ field }) => (
-              <Popover>
-                <PopoverTrigger asChild><Button variant="outline" role="combobox" className="w-full justify-between">{field.value ? allProducts.find((p) => p.id === field.value)?.name : "Select contained 'each' product..."}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                  <Command><CommandInput placeholder="Search product..." /><CommandEmpty>No product found.</CommandEmpty><CommandGroup>
-                    {/* 3. This 'allProducts.map' will now work correctly */}
-                    {allProducts.map((product) => (
-                      <CommandItem key={product.id} value={product.id} onSelect={(currentValue) => { field.onChange(currentValue === field.value ? null : currentValue); }}>
-                        <Check className={cn("mr-2 h-4 w-4", field.value === product.id ? "opacity-100" : "opacity-0")} />
-                        {product.name}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup></Command>
-                </PopoverContent>
-              </Popover>
-            )}
+
+      <div className="space-y-4">
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="is-case-product"
+            checked={isCaseProduct}
+            onCheckedChange={handleCaseToggle}
           />
-          <Input 
-            type="number" 
-            {...register("caseUnitCount", { 
-              valueAsNumber: true, 
-              validate: v => (!v || v > 0) || "Must be greater than 0"
-            })} 
-            placeholder="Units per Case (e.g., 12)" 
-          />
+          <Label htmlFor="is-case-product">This product is a Case</Label>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild><Info className="h-4 w-4 text-muted-foreground" /></TooltipTrigger>
+              <TooltipContent><p>Enable this if the product is a bulk item (e.g., a case of 24 cans) <br /> that contains a smaller, sellable product.</p></TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
+
+        {/* This section is now conditionally rendered */}
+        {isCaseProduct && (
+          <div className="p-4 border rounded-lg bg-muted/50">
+            <h3 className="text-lg font-medium mb-2">Case Properties</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <Controller
+                name="containsProductId"
+                control={control}
+                render={({ field }) => (
+                  <Popover>
+                    <PopoverTrigger asChild><Button variant="outline" role="combobox" className="w-full justify-between">{field.value ? allProducts.find((p) => p.id === field.value)?.name : "Select contained 'each' product..."}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                      <Command><CommandInput placeholder="Search product..." /><CommandEmpty>No product found.</CommandEmpty><CommandGroup>
+                        {allProducts.map((product) => (
+                          <CommandItem key={product.id} value={product.id} onSelect={(currentValue) => { field.onChange(currentValue === field.value ? null : currentValue); }}>
+                            <Check className={cn("mr-2 h-4 w-4", field.value === product.id ? "opacity-100" : "opacity-0")} />
+                            {product.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup></Command>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              />
+              <Input type="number" {...register("caseUnitCount", { valueAsNumber: true })} placeholder="Units per Case (e.g., 12)" />
+            </div>
+          </div>
+        )}
       </div>
-      
+
+
       <div className="pt-6 space-x-2 flex items-center justify-end w-full">
         <Button disabled={loading} variant="outline" onClick={onCancel} type="button">Cancel</Button>
         <Button disabled={loading} type="submit">{initialData ? "Save changes" : "Create"}</Button>
