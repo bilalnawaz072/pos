@@ -18,6 +18,7 @@ import {
   SlidersHorizontal,
   ClipboardList,
   ShieldCheck,
+  CalendarDays,
 } from 'lucide-react';
 
 // We only need to export the object containing the components.
@@ -38,5 +39,6 @@ export const Icons = {
   case: PackageOpen,
   promotions: Ticket,
   purchaseorder: ClipboardList,
-  audit: ShieldCheck
+  audit: ShieldCheck,
+  schedule: CalendarDays
 };

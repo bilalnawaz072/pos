@@ -25,11 +25,14 @@ model Role {
 }
 
 model Employee {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   firstName String
   lastName  String
-  pin       String   @unique // 4 to 6 digit PIN for login
-  isActive  Boolean  @default(true)
+  pin       String    @unique // 4 to 6 digit PIN for login
+  isActive  Boolean   @default(true)
+  shifts    Shift[] // ADD THIS RELATION
+  timeLogs  TimeLog[] // ADD THIS RELATION
+
   roleId    String
   role      Role     @relation(fields: [roleId], references: [id])
   createdAt DateTime @default(now())
@@ -58,13 +61,13 @@ model Category {
 
 // Add the relation back to Vendor
 model Vendor {
-  id              String          @id @default(cuid())
-  name            String          @unique
-  contact         String?
-  products        Product[]
-  purchaseOrders  PurchaseOrder[] // ADD THIS LINE
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id             String          @id @default(cuid())
+  name           String          @unique
+  contact        String?
+  products       Product[]
+  purchaseOrders PurchaseOrder[] // ADD THIS LINE
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 model Product {
@@ -98,11 +101,11 @@ model Product {
   containsProduct   Product? @relation("CaseToEach", fields: [containsProductId], references: [id])
 
   // For an "each" product, this lists the "case" products that contain it.
-  containedInCases Product[]   @relation("CaseToEach")
+  containedInCases   Product[]           @relation("CaseToEach")
   // END: NEW FIELDS
-  deliOrders       DeliOrder[]
+  deliOrders         DeliOrder[]
   purchaseOrderItems PurchaseOrderItem[]
-  reorderThreshold Int?
+  reorderThreshold   Int?
 }
 
 // ADD THIS NEW MODEL
@@ -222,45 +225,71 @@ enum PurchaseOrderStatus {
 
 // Add this new model for Purchase Orders
 model PurchaseOrder {
-  id          String              @id @default(cuid())
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  orderedAt   DateTime?
-  expectedAt  DateTime?
-  receivedAt  DateTime?
-  status      PurchaseOrderStatus @default(PENDING)
-  
-  vendorId    String
-  vendor      Vendor              @relation(fields: [vendorId], references: [id])
-  
-  items       PurchaseOrderItem[]
+  id         String              @id @default(cuid())
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  orderedAt  DateTime?
+  expectedAt DateTime?
+  receivedAt DateTime?
+  status     PurchaseOrderStatus @default(PENDING)
+
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id])
+
+  items PurchaseOrderItem[]
 }
 
 // Add this new model for items within a PO
 model PurchaseOrderItem {
-  id                String        @id @default(cuid())
-  quantityOrdered   Int
-  quantityReceived  Int           @default(0)
-  costPerItem       Float // Cost at the time of order
-  
-  purchaseOrderId   String
-  purchaseOrder     PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  
-  productId         String
-  product           Product       @relation(fields: [productId], references: [id])
+  id               String @id @default(cuid())
+  quantityOrdered  Int
+  quantityReceived Int    @default(0)
+  costPerItem      Float // Cost at the time of order
+
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 }
 
 // ADD THIS NEW MODEL
 model AuditLog {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  
-  action      String   // e.g., "PRODUCT_DELETE", "TRANSACTION_REFUND"
-  details     String   // Human-readable description of the event
-  
-  entityId    String   // The ID of the object that was affected
-  entityType  String   // The type of object (e.g., "Product")
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  action  String // e.g., "PRODUCT_DELETE", "TRANSACTION_REFUND"
+  details String // Human-readable description of the event
+
+  entityId   String // The ID of the object that was affected
+  entityType String // The type of object (e.g., "Product")
 
   // In a real system with authentication, you would store the employee's ID here
   // employeeId  String?
+}
+
+// ADD THIS NEW MODEL for scheduled shifts
+model Shift {
+  id        String   @id @default(cuid())
+  startTime DateTime
+  endTime   DateTime
+  notes     String?
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  timeLogs TimeLog[] // A shift can have multiple clock-ins/outs (e.g., for breaks)
+}
+
+// ADD THIS NEW MODEL for clock-in/out records
+model TimeLog {
+  id       String    @id @default(cuid())
+  clockIn  DateTime
+  clockOut DateTime? // Null until the employee clocks out
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  shiftId String?
+  shift   Shift?  @relation(fields: [shiftId], references: [id])
 }

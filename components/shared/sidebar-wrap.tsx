@@ -16,6 +16,7 @@ import {
   Sandwich,
   ClipboardList,
   ShieldCheck,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ const navGroups = [
       { href: "/employees", label: "Employees", icon: Users },
       { href: "/promotions", label: "Promotions", icon: Ticket },
       { href: '/admin/audit-log', label: 'Audit Log', icon: ShieldCheck },
+      { href: '/schedule', label: 'Schedule', icon: CalendarDays }
     ],
   },
   {

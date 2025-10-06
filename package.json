@@ -13,6 +13,11 @@
     "db:reset": "prisma migrate reset"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.19",
+    "@fullcalendar/daygrid": "^6.1.19",
+    "@fullcalendar/interaction": "^6.1.19",
+    "@fullcalendar/react": "^6.1.19",
+    "@fullcalendar/timegrid": "^6.1.19",
     "@hookform/resolvers": "^5.2.2",
     "@prisma/client": "^6.16.3",
     "@radix-ui/react-accordion": "^1.2.12",
